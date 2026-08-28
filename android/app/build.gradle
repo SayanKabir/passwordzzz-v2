@@ -36,6 +36,12 @@ android {
         jvmTarget = '17'
     }
 
+    buildFeatures {
+        // Required on AGP 8+ for the generated BuildConfig used to compile the
+        // screenshot opt-out out of release builds.
+        buildConfig true
+    }
+
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }

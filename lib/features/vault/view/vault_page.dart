@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app_router.dart';
 import '../../../ui/theme/app_colors.dart';
 import '../../../ui/theme/motion.dart';
+import '../../../ui/widgets/brand_logo.dart';
 import '../../unlock/bloc/app_lock_cubit.dart';
 import '../widgets/vault_empty_state.dart';
 
@@ -23,11 +24,7 @@ class VaultPage extends StatelessWidget {
       appBar: AppBar(
         toolbarHeight: 64,
         titleSpacing: Space.lg,
-        title: Image.asset(
-          'assets/logo-full.png',
-          height: 26,
-          filterQuality: FilterQuality.medium,
-        ),
+        title: const BrandLogo.wordmark(height: 26),
         actions: [
           IconButton(
             tooltip: 'Lock vault',
