@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../ui/theme/app_colors.dart';
 import '../../../ui/theme/motion.dart';
+import '../../../ui/widgets/glass.dart';
+import '../../../ui/widgets/passwordzzz_mark.dart';
 
 class VaultEmptyState extends StatelessWidget {
   const VaultEmptyState({super.key});
@@ -17,17 +19,14 @@ class VaultEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                color: c.brandMuted,
-                borderRadius: BorderRadius.circular(Radii.xl),
-              ),
-              child: Icon(
-                Icons.shield_outlined,
-                size: 40,
-                color: c.brand,
+            FauxGlass(
+              borderRadius: BorderRadius.circular(Radii.xl),
+              tintOpacity: 0.5,
+              child: SizedBox.square(
+                dimension: 92,
+                child: Center(
+                  child: PasswordzzzMark(size: 46, faceColor: c.surface),
+                ),
               ),
             ),
             const SizedBox(height: Space.xl),

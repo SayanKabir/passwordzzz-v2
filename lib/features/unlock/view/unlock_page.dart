@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../ui/theme/app_colors.dart';
-import '../../../ui/widgets/brand_logo.dart';
+import '../../../ui/widgets/passwordzzz_mark.dart';
 import '../../../ui/theme/motion.dart';
 import '../bloc/app_lock_cubit.dart';
 import '../bloc/app_lock_state.dart';
@@ -28,7 +28,7 @@ class UnlockPage extends StatelessWidget {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const BrandLogo.mark(size: 72),
+                    const BreathingPasswordzzzMark(size: 84),
                     const SizedBox(height: Space.xl),
                     Text(
                       'Passwordzzz',

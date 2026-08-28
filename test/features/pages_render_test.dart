@@ -7,6 +7,8 @@ import 'package:passwordzzz_v2/features/unlock/bloc/app_lock_cubit.dart';
 import 'package:passwordzzz_v2/features/unlock/view/unlock_page.dart';
 import 'package:passwordzzz_v2/features/vault/view/vault_page.dart';
 import 'package:passwordzzz_v2/ui/theme/app_theme.dart';
+import 'package:passwordzzz_v2/ui/widgets/glass.dart';
+import 'package:passwordzzz_v2/ui/widgets/passwordzzz_mark.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Every page is pumped under both themes. This is what catches a token read
@@ -61,7 +63,9 @@ void main() {
 
         expect(find.text('Your vault is empty'), findsOneWidget);
         expect(find.byIcon(Icons.lock_outline), findsOneWidget);
-        expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+        // Settings is reached by tapping the wordmark; there is no gear icon.
+        expect(find.byIcon(Icons.settings_outlined), findsNothing);
+        expect(find.byType(PasswordzzzWordmark), findsOneWidget);
       });
 
       testWidgets('SettingsPage renders the theme selector', (tester) async {
@@ -89,11 +93,10 @@ void main() {
     expect(prefs.getString('themeMode'), 'light');
   });
 
-  testWidgets('the vault app bar has exactly one BackdropFilter', (
-    tester,
-  ) async {
+  testWidgets('the vault screen spends at most one blur', (tester) async {
     // v1 stacked four simultaneous full-screen blurs, which was the main
-    // source of scroll jank. This asserts the budget rather than trusting it.
+    // source of scroll jank on mid-range hardware. This asserts the budget
+    // rather than trusting it.
     final lock = AppLockCubit();
     addTearDown(lock.close);
 
@@ -103,5 +106,42 @@ void main() {
       find.byType(BackdropFilter).evaluate().length,
       lessThanOrEqualTo(1),
     );
+  });
+
+  testWidgets('GlassScope(false) forces the app bar off the blur path', (
+    tester,
+  ) async {
+    // What a sheet does while it owns the budget.
+    final lock = AppLockCubit();
+    addTearDown(lock.close);
+
+    await tester.pumpWidget(
+      host(
+        const GlassScope(blurAvailable: false, child: VaultPage()),
+        ThemeMode.dark,
+        lock,
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+  });
+
+  testWidgets('the mark paints without an asset in both themes', (
+    tester,
+  ) async {
+    // The v1 logo was a white PNG that vanished on light surfaces. A painter
+    // takes its color from the theme, so this can't regress silently.
+    for (final mode in [ThemeMode.light, ThemeMode.dark]) {
+      final lock = AppLockCubit();
+      addTearDown(lock.close);
+
+      await tester.pumpWidget(
+        host(const Center(child: PasswordzzzMark(size: 64)), mode, lock),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(PasswordzzzMark), findsOneWidget);
+    }
   });
 }

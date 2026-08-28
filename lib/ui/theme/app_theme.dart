@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -122,49 +123,46 @@ abstract final class AppTheme {
         ),
       ),
 
-      // FadeForwards is the Material 3 shared-axis push: content slides a
-      // short distance and cross-fades, which reads faster than Zoom's scale.
+      // iOS-style horizontal slide on every platform, including Android.
+      // Material's fade-forwards/zoom builders read as a cross-fade, which is
+      // exactly the motion this app is meant to avoid.
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
-          TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
         },
       ),
     );
   }
 
   static TextTheme _textTheme(TextTheme base, AppColors c) {
-    // Montserrat for headings/labels, Inter for body — Inter is designed for
-    // small UI text and has proper tabular figures, which matters for the
-    // entropy readouts and TOTP countdowns.
-    final display = GoogleFonts.montserratTextTheme(base);
-    final body = GoogleFonts.interTextTheme(base);
+    // One geometric sans throughout. Plus Jakarta Sans is geometric but
+    // slightly warm, which sits with the rounded logo, and it ships tabular
+    // figures — needed so entropy readouts and TOTP countdowns don't jitter as
+    // digits change.
+    final t = GoogleFonts.plusJakartaSansTextTheme(base);
 
-    return base
+    return t
         .copyWith(
-          displayLarge: display.displayLarge,
-          displayMedium: display.displayMedium,
-          displaySmall: display.displaySmall,
-          headlineLarge: display.headlineLarge?.copyWith(
+          headlineLarge: t.headlineLarge?.copyWith(
             fontWeight: FontWeight.w700,
+            letterSpacing: -0.8,
           ),
-          headlineMedium: display.headlineMedium?.copyWith(
+          headlineMedium: t.headlineMedium?.copyWith(
             fontWeight: FontWeight.w700,
+            letterSpacing: -0.6,
           ),
-          headlineSmall: display.headlineSmall?.copyWith(
+          headlineSmall: t.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+          ),
+          titleLarge: t.titleLarge?.copyWith(
             fontWeight: FontWeight.w600,
+            letterSpacing: -0.3,
           ),
-          titleLarge: display.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-          titleMedium: display.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-          titleSmall: display.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          bodyLarge: body.bodyLarge,
-          bodyMedium: body.bodyMedium,
-          bodySmall: body.bodySmall,
-          labelLarge: display.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-          labelMedium: display.labelMedium,
-          labelSmall: display.labelSmall,
+          titleMedium: t.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          titleSmall: t.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          labelLarge: t.labelLarge?.copyWith(fontWeight: FontWeight.w600),
         )
         .apply(bodyColor: c.textPrimary, displayColor: c.textPrimary);
   }
