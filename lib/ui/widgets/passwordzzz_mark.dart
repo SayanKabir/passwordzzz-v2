@@ -162,23 +162,12 @@ class _MarkPainter extends CustomPainter {
       face,
     );
 
-    // Keyhole mouth: bore plus a tapered stem. The stem is sub-pixel below
-    // ~18px and simply disappears, leaving a round mouth — which is the
-    // correct reading at that size anyway.
+    // Mouth: a plain circle. An earlier version drew a keyhole (bore plus
+    // tapered stem) which read as fussy at every size and fought the closed
+    // eyes for attention.
     canvas.drawCircle(
-      const Offset(42, 74),
-      3.6,
-      Paint()
-        ..color = faceColor
-        ..isAntiAlias = true,
-    );
-    canvas.drawPath(
-      Path()
-        ..moveTo(40.4, 76.4)
-        ..lineTo(39.4, 81)
-        ..lineTo(44.6, 81)
-        ..lineTo(43.6, 76.4)
-        ..close(),
+      const Offset(42, 75),
+      3.4,
       Paint()
         ..color = faceColor
         ..isAntiAlias = true,

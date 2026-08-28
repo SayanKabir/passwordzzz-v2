@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:passwordzzz_v2/core/crypto/biometric_authenticator.dart';
 import 'package:passwordzzz_v2/features/settings/bloc/theme_cubit.dart';
 import 'package:passwordzzz_v2/features/settings/view/settings_page.dart';
 import 'package:passwordzzz_v2/features/unlock/bloc/app_lock_cubit.dart';
@@ -15,6 +16,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// through `Theme.of(context).extension<AppColors>()!` that was never
 /// registered for one brightness — a null-assertion crash that only shows up
 /// in the theme you didn't happen to be testing in.
+class _AlwaysAllow implements BiometricAuthenticator {
+  @override
+  Future<bool> isAvailable() async => true;
+  @override
+  Future<AuthOutcome> authenticate({required String reason}) async =>
+      const AuthSucceeded();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -46,7 +55,7 @@ void main() {
   ]) {
     group('$name theme', () {
       testWidgets('UnlockPage renders its locked state', (tester) async {
-        final lock = AppLockCubit();
+        final lock = AppLockCubit(authenticator: _AlwaysAllow());
         addTearDown(lock.close);
 
         await tester.pumpWidget(host(const UnlockPage(), mode, lock));
@@ -56,7 +65,7 @@ void main() {
       });
 
       testWidgets('VaultPage renders the empty state', (tester) async {
-        final lock = AppLockCubit();
+        final lock = AppLockCubit(authenticator: _AlwaysAllow());
         addTearDown(lock.close);
 
         await tester.pumpWidget(host(const VaultPage(), mode, lock));
@@ -69,7 +78,7 @@ void main() {
       });
 
       testWidgets('SettingsPage renders the theme selector', (tester) async {
-        final lock = AppLockCubit();
+        final lock = AppLockCubit(authenticator: _AlwaysAllow());
         addTearDown(lock.close);
 
         await tester.pumpWidget(host(const SettingsPage(), mode, lock));
@@ -83,7 +92,7 @@ void main() {
   }
 
   testWidgets('tapping a theme segment persists the choice', (tester) async {
-    final lock = AppLockCubit();
+    final lock = AppLockCubit(authenticator: _AlwaysAllow());
     addTearDown(lock.close);
 
     await tester.pumpWidget(host(const SettingsPage(), ThemeMode.dark, lock));
@@ -97,7 +106,7 @@ void main() {
     // v1 stacked four simultaneous full-screen blurs, which was the main
     // source of scroll jank on mid-range hardware. This asserts the budget
     // rather than trusting it.
-    final lock = AppLockCubit();
+    final lock = AppLockCubit(authenticator: _AlwaysAllow());
     addTearDown(lock.close);
 
     await tester.pumpWidget(host(const VaultPage(), ThemeMode.dark, lock));
@@ -112,7 +121,7 @@ void main() {
     tester,
   ) async {
     // What a sheet does while it owns the budget.
-    final lock = AppLockCubit();
+    final lock = AppLockCubit(authenticator: _AlwaysAllow());
     addTearDown(lock.close);
 
     await tester.pumpWidget(
@@ -132,7 +141,7 @@ void main() {
     // The v1 logo was a white PNG that vanished on light surfaces. A painter
     // takes its color from the theme, so this can't regress silently.
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {
-      final lock = AppLockCubit();
+      final lock = AppLockCubit(authenticator: _AlwaysAllow());
       addTearDown(lock.close);
 
       await tester.pumpWidget(
