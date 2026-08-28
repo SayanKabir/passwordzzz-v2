@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../app_router.dart';
 
 import '../../../ui/theme/app_colors.dart';
 import '../../../ui/theme/motion.dart';
@@ -58,6 +61,28 @@ class SettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: Space.xl),
 
+          Text(
+            'YOUR DATA',
+            style: text.labelSmall?.copyWith(
+              color: c.textSecondary,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: Space.sm),
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.swap_horiz_rounded, color: c.brand),
+              title: const Text('Import & export'),
+              subtitle: const Text('Move passwords in from another app'),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(Radii.lg)),
+              ),
+              onTap: () => context.push(Routes.transfer),
+            ),
+          ),
+
+          const SizedBox(height: Space.xl),
+
           // v1's settings page carried an "Encrypt Passwords" toggle that wrote
           // a pref nothing ever read, and a privacy policy stating passwords
           // were encrypted when they were stored in plaintext. Neither is
@@ -72,8 +97,7 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(width: Space.md),
                   Expanded(
                     child: Text(
-                      'Security, sync, and autofill settings arrive with '
-                      'Phases 1–6.',
+                      'Sync and autofill settings arrive with Phases 3–6.',
                       style: text.bodySmall?.copyWith(color: c.textSecondary),
                     ),
                   ),

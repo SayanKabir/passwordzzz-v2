@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'features/settings/view/settings_page.dart';
 import 'features/unlock/bloc/app_lock_cubit.dart';
 import 'features/unlock/bloc/app_lock_state.dart';
+import 'features/settings/view/transfer_page.dart';
 import 'features/unlock/view/unlock_page.dart';
 import 'features/vault/view/vault_page.dart';
 
@@ -13,6 +14,7 @@ abstract final class Routes {
   static const unlock = '/unlock';
   static const vault = '/';
   static const settings = '/settings';
+  static const transfer = '/settings/transfer';
 }
 
 /// Router with a lock-state guard.
@@ -48,6 +50,12 @@ GoRouter buildRouter(AppLockCubit lock) {
           GoRoute(
             path: 'settings',
             builder: (context, state) => const SettingsPage(),
+            routes: [
+              GoRoute(
+                path: 'transfer',
+                builder: (context, state) => const TransferPage(),
+              ),
+            ],
           ),
         ],
       ),
