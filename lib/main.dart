@@ -24,7 +24,7 @@ class PasswordzzzApp extends StatefulWidget {
 }
 
 class _PasswordzzzAppState extends State<PasswordzzzApp> {
-  late final AppLockCubit _lock = AppLockCubit();
+  late final AppLockCubit _lock = AppLockCubit()..init();
   late final _router = buildRouter(_lock);
 
   @override

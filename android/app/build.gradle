@@ -76,4 +76,9 @@ flutter {
     source '../..'
 }
 
-dependencies {}
+dependencies {
+    // BiometricPrompt with CryptoObject support. The vault key is unwrapped by
+    // a Cipher bound to the prompt, so the Keystore key is unusable without a
+    // fresh authentication — not merely gated by one.
+    implementation "androidx.biometric:biometric:1.1.0"
+}

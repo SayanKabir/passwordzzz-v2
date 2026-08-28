@@ -3,73 +3,109 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/crypto/biometric_authenticator.dart';
+import '../../../core/crypto/keystore_channel.dart';
 import 'app_lock_state.dart';
 
-/// Owns the lock lifecycle: unlock, manual lock, and the background auto-lock
-/// timer.
+/// Owns the lock lifecycle: first-run key creation, unlock, manual lock, and
+/// the background auto-lock timer.
 ///
-/// Phase 0 has no crypto behind it — [unlock] simply transitions. Phase 1
-/// replaces the body of [unlock] with the biometric prompt and Keystore
-/// unwrap; the states, the timer, and the router guard stay exactly as they
-/// are, so nothing downstream changes.
+/// The prompt and the unwrap are a single native call. They cannot be split:
+/// the Keystore cipher is bound to the prompt through a CryptoObject, which is
+/// what makes the authentication cryptographic rather than cosmetic.
 class AppLockCubit extends Cubit<AppLockState> with WidgetsBindingObserver {
-  AppLockCubit({BiometricAuthenticator? authenticator})
-    : _auth = authenticator ?? LocalAuthAuthenticator(),
-      super(const LockLocked()) {
+  AppLockCubit({KeystoreChannel? keystore})
+    : _keystore = keystore ?? MethodChannelKeystore(),
+      super(const LockChecking()) {
     WidgetsBinding.instance.addObserver(this);
   }
 
-  final BiometricAuthenticator _auth;
-
+  final KeystoreChannel _keystore;
   Timer? _autoLockTimer;
 
   /// How long the app may sit in the background before it re-locks.
   static const autoLockAfter = Duration(seconds: 60);
 
+  /// Determines whether this device already has a wrapped vault key.
+  Future<void> init() async {
+    try {
+      emit(
+        await _keystore.hasVaultKey()
+            ? const LockLocked()
+            : const LockUninitialized(),
+      );
+    } on KeystoreException catch (e) {
+      emit(LockLocked(reason: e.message));
+    }
+  }
+
+  /// First run: generate a vault key and wrap it under a new Keystore key.
+  /// Leaves the vault unlocked, since the user just proved presence by
+  /// installing and opening the app and has nothing to protect yet.
+  Future<void> createVault() async {
+    if (state is LockUnlocking) return;
+    emit(const LockUnlocking());
+    try {
+      emit(
+        LockUnlocked(
+          await _keystore.createVaultKey(
+            title: 'Create your vault',
+            subtitle: 'Confirm it is you, so only you can open it later',
+          ),
+        ),
+      );
+    } on KeystoreException catch (e) {
+      emit(_failureState(e));
+    }
+  }
+
   Future<void> unlock() async {
     if (state is LockUnlocking) return;
     emit(const LockUnlocking());
 
-    final outcome = await _auth.authenticate(
-      reason: 'Unlock your Passwordzzz vault',
-    );
-
-    // Phase 1 inserts the Keystore unwrap here: a successful prompt releases
-    // the wrapped vault key, which then rides in LockUnlocked.
-    switch (outcome) {
-      case AuthSucceeded():
-        emit(const LockUnlocked());
-      case AuthCancelled():
-        // Dismissing the prompt is not an error; say nothing.
-        emit(const LockLocked());
-      case AuthNotSetUp():
-        emit(
-          const LockLocked(
-            reason:
-                'Passwordzzz needs a screen lock. Add a PIN, pattern, or '
-                'fingerprint in your device settings, then try again.',
-          ),
-        );
-      case AuthLockedOut(permanent: final permanent):
-        emit(
-          LockLocked(
-            reason: permanent
-                ? 'Too many attempts. Unlock your device with its PIN or '
-                      'password, then reopen Passwordzzz.'
-                : 'Too many attempts. Wait a moment and try again.',
-          ),
-        );
-      case AuthFailed(message: final message):
-        emit(LockLocked(reason: message));
+    try {
+      final key = await _keystore.unlockVaultKey(
+        title: 'Unlock Passwordzzz',
+        subtitle: 'Your vault is encrypted on this device',
+      );
+      emit(LockUnlocked(key));
+    } on KeystoreException catch (e) {
+      emit(_failureState(e));
     }
   }
 
-  /// Drops the vault key and returns to [LockLocked].
+  AppLockState _failureState(KeystoreException e) => switch (e.failure) {
+    // Dismissing the prompt is not an error; show no message.
+    KeystoreFailure.cancelled => const LockLocked(),
+    KeystoreFailure.notSetUp => const LockLocked(
+      reason:
+          'Passwordzzz needs a screen lock. Add a PIN, pattern, or fingerprint '
+          'in your device settings, then try again.',
+    ),
+    KeystoreFailure.lockedOut => const LockLocked(
+      reason: 'Too many attempts. Wait a moment and try again.',
+    ),
+    KeystoreFailure.lockedOutPermanent => const LockLocked(
+      reason:
+          'Too many attempts. Unlock your device with its PIN or password, '
+          'then reopen Passwordzzz.',
+    ),
+    KeystoreFailure.keyInvalidated => LockUnrecoverable(e.message),
+    KeystoreFailure.noVault => const LockUninitialized(),
+    KeystoreFailure.failed => LockLocked(reason: e.message),
+  };
+
+  /// Zeroes the vault key and returns to [LockLocked].
   void lock({String? reason}) {
     _autoLockTimer?.cancel();
     _autoLockTimer = null;
-    // Phase 1: zero the key bytes before dropping the reference.
+
+    final current = state;
+    if (current is LockUnlocked) {
+      // Overwrite the key material before dropping the reference. Dart cannot
+      // guarantee this is the only copy, but it removes the value from the
+      // live object rather than waiting on the GC.
+      current.vaultKey.destroy();
+    }
     emit(LockLocked(reason: reason));
   }
 
@@ -94,6 +130,8 @@ class AppLockCubit extends Cubit<AppLockState> with WidgetsBindingObserver {
   @override
   Future<void> close() {
     _autoLockTimer?.cancel();
+    final current = state;
+    if (current is LockUnlocked) current.vaultKey.destroy();
     WidgetsBinding.instance.removeObserver(this);
     return super.close();
   }

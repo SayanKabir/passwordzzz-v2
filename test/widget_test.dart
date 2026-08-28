@@ -1,137 +1,184 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:passwordzzz_v2/core/crypto/biometric_authenticator.dart';
+import 'package:passwordzzz_v2/core/crypto/keystore_channel.dart';
+import 'package:passwordzzz_v2/core/crypto/vault_key.dart';
 import 'package:passwordzzz_v2/features/unlock/bloc/app_lock_cubit.dart';
 import 'package:passwordzzz_v2/features/unlock/bloc/app_lock_state.dart';
 
 /// Scriptable stand-in so lock behaviour can be tested without a platform
-/// channel or a real fingerprint sensor.
-class _FakeAuth implements BiometricAuthenticator {
-  _FakeAuth(this.outcome);
+/// channel, a Keystore, or a real fingerprint sensor.
+class FakeKeystore implements KeystoreChannel {
+  FakeKeystore({this.vaultExists = true, this.failure});
 
-  AuthOutcome outcome;
-  int calls = 0;
+  bool vaultExists;
+  KeystoreFailure? failure;
+  int unlockCalls = 0;
+
+  /// The key handed out, kept so tests can assert it was zeroed.
+  VaultKey? issued;
 
   @override
-  Future<bool> isAvailable() async => true;
+  Future<bool> hasVaultKey() async => vaultExists;
 
   @override
-  Future<AuthOutcome> authenticate({required String reason}) async {
-    calls++;
-    return outcome;
+  Future<AuthAvailability> canAuthenticate() async => AuthAvailability.available;
+
+  @override
+  Future<VaultKey> createVaultKey({
+    required String title,
+    required String subtitle,
+  }) async {
+    if (failure != null) throw KeystoreException(failure!, 'fake');
+    vaultExists = true;
+    return issued = VaultKey(Uint8List(VaultKey.length)..fillRange(0, 32, 3));
   }
+
+  @override
+  Future<VaultKey> unlockVaultKey({
+    required String title,
+    required String subtitle,
+  }) async {
+    unlockCalls++;
+    if (failure != null) throw KeystoreException(failure!, 'fake message');
+    return issued = VaultKey(Uint8List(VaultKey.length)..fillRange(0, 32, 3));
+  }
+
+  @override
+  Future<void> deleteVaultKey() async => vaultExists = false;
 }
 
 void main() {
-  // AppLockCubit registers a WidgetsBindingObserver in its constructor, so the
-  // binding must exist before any instance is built.
+  // AppLockCubit registers a WidgetsBindingObserver in its constructor.
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('AppLockCubit', () {
-    test('starts locked', () {
-      final cubit = AppLockCubit(authenticator: _FakeAuth(const AuthSucceeded()));
+    test('starts in LockChecking before init runs', () {
+      final cubit = AppLockCubit(keystore: FakeKeystore());
       addTearDown(cubit.close);
+      expect(cubit.state, isA<LockChecking>());
+    });
+
+    test('init reports Locked when a wrapped key exists', () async {
+      final cubit = AppLockCubit(keystore: FakeKeystore(vaultExists: true));
+      addTearDown(cubit.close);
+      await cubit.init();
       expect(cubit.state, isA<LockLocked>());
     });
 
-    test('unlock transitions through LockUnlocking to LockUnlocked', () async {
-      final cubit = AppLockCubit(authenticator: _FakeAuth(const AuthSucceeded()));
+    test('init reports Uninitialized on a fresh install', () async {
+      final cubit = AppLockCubit(keystore: FakeKeystore(vaultExists: false));
+      addTearDown(cubit.close);
+      await cubit.init();
+      expect(cubit.state, isA<LockUninitialized>());
+    });
+
+    test('unlock transitions through Unlocking to Unlocked', () async {
+      final cubit = AppLockCubit(keystore: FakeKeystore());
       addTearDown(cubit.close);
 
-      // Set the expectation before triggering, so no emission is missed to a
-      // late subscription.
       final expectation = expectLater(
         cubit.stream,
         emitsInOrder([isA<LockUnlocking>(), isA<LockUnlocked>()]),
       );
-
       await cubit.unlock();
       await expectation;
     });
 
-    test('concurrent unlock calls are ignored while one is in flight', () async {
-      final cubit = AppLockCubit(authenticator: _FakeAuth(const AuthSucceeded()));
+    test('concurrent unlocks raise only one prompt', () async {
+      // Two prompts stacked on one another is a native-side mess and looks
+      // broken to the user.
+      final keystore = FakeKeystore();
+      final cubit = AppLockCubit(keystore: keystore);
       addTearDown(cubit.close);
 
-      final states = <AppLockState>[];
-      final sub = cubit.stream.listen(states.add);
-
       await Future.wait([cubit.unlock(), cubit.unlock()]);
-      await Future<void>.delayed(Duration.zero);
-      await sub.cancel();
 
-      // A second biometric prompt must not stack on the first.
-      expect(states.whereType<LockUnlocking>(), hasLength(1));
+      expect(keystore.unlockCalls, 1);
       expect(cubit.state, isA<LockUnlocked>());
+    });
+
+    test('lock() zeroes the vault key', () async {
+      // The whole point of holding the key in a mutable buffer.
+      final keystore = FakeKeystore();
+      final cubit = AppLockCubit(keystore: keystore);
+      addTearDown(cubit.close);
+
+      await cubit.unlock();
+      final key = (cubit.state as LockUnlocked).vaultKey;
+      expect(key.isDestroyed, isFalse);
+
+      cubit.lock();
+
+      expect(key.isDestroyed, isTrue);
+      expect(cubit.state, isA<LockLocked>());
+    });
+
+    test('close() zeroes the vault key too', () async {
+      final cubit = AppLockCubit(keystore: FakeKeystore());
+      await cubit.unlock();
+      final key = (cubit.state as LockUnlocked).vaultKey;
+
+      await cubit.close();
+
+      expect(key.isDestroyed, isTrue);
     });
 
     test('a cancelled prompt returns to Locked with no message', () async {
       final cubit = AppLockCubit(
-        authenticator: _FakeAuth(const AuthCancelled()),
+        keystore: FakeKeystore(failure: KeystoreFailure.cancelled),
       );
       addTearDown(cubit.close);
 
       await cubit.unlock();
 
       expect(cubit.state, isA<LockLocked>());
-      expect(
-        (cubit.state as LockLocked).reason,
-        isNull,
-        reason: 'dismissing the prompt is not an error',
-      );
+      expect((cubit.state as LockLocked).reason, isNull);
     });
 
     test('no screen lock configured explains how to fix it', () async {
       final cubit = AppLockCubit(
-        authenticator: _FakeAuth(const AuthNotSetUp()),
+        keystore: FakeKeystore(failure: KeystoreFailure.notSetUp),
       );
       addTearDown(cubit.close);
 
       await cubit.unlock();
 
-      expect(cubit.state, isA<LockLocked>());
       expect((cubit.state as LockLocked).reason, contains('screen lock'));
     });
 
-    test('permanent lockout tells the user to unlock the device', () async {
+    test('an invalidated key becomes Unrecoverable, not Locked', () async {
+      // Retrying the prompt cannot help once biometric enrolment changed, so
+      // the UI has to offer recovery instead of another attempt.
       final cubit = AppLockCubit(
-        authenticator: _FakeAuth(const AuthLockedOut(permanent: true)),
+        keystore: FakeKeystore(failure: KeystoreFailure.keyInvalidated),
       );
       addTearDown(cubit.close);
 
       await cubit.unlock();
 
-      expect((cubit.state as LockLocked).reason, contains('PIN or password'));
+      expect(cubit.state, isA<LockUnrecoverable>());
     });
 
-    test('a failed auth never reaches LockUnlocked', () async {
-      final cubit = AppLockCubit(
-        authenticator: _FakeAuth(const AuthFailed('sensor error')),
-      );
-      addTearDown(cubit.close);
-
-      await cubit.unlock();
-
-      expect(cubit.state, isNot(isA<LockUnlocked>()));
-    });
-
-    test('lock() returns to LockLocked and carries the reason', () async {
-      final cubit = AppLockCubit(authenticator: _FakeAuth(const AuthSucceeded()));
-      addTearDown(cubit.close);
-
-      await cubit.unlock();
-      cubit.lock(reason: 'Session expired');
-
-      expect(cubit.state, isA<LockLocked>());
-      expect((cubit.state as LockLocked).reason, 'Session expired');
+    test('a failed unlock never reaches LockUnlocked', () async {
+      for (final f in [
+        KeystoreFailure.cancelled,
+        KeystoreFailure.notSetUp,
+        KeystoreFailure.lockedOut,
+        KeystoreFailure.lockedOutPermanent,
+        KeystoreFailure.keyInvalidated,
+        KeystoreFailure.failed,
+      ]) {
+        final cubit = AppLockCubit(keystore: FakeKeystore(failure: f));
+        await cubit.unlock();
+        expect(cubit.state, isNot(isA<LockUnlocked>()), reason: '$f');
+        await cubit.close();
+      }
     });
 
     test('backgrounding while unlocked defers locking to the timer', () async {
-      // Guards the rule that the vault must not stay readable in the recents
-      // switcher, without locking so eagerly that an app-switch to fetch an
-      // OTP wipes the session. Phase 1 extends this to assert the key bytes
-      // are zeroed when the timer does fire.
-      final cubit = AppLockCubit(authenticator: _FakeAuth(const AuthSucceeded()));
+      final cubit = AppLockCubit(keystore: FakeKeystore());
       addTearDown(cubit.close);
       await cubit.unlock();
 
@@ -146,7 +193,7 @@ void main() {
     });
 
     test('returning to the foreground cancels a pending auto-lock', () async {
-      final cubit = AppLockCubit(authenticator: _FakeAuth(const AuthSucceeded()));
+      final cubit = AppLockCubit(keystore: FakeKeystore());
       addTearDown(cubit.close);
       await cubit.unlock();
 

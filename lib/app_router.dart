@@ -26,6 +26,9 @@ GoRouter buildRouter(AppLockCubit lock) {
     initialLocation: Routes.vault,
     refreshListenable: _CubitRefresh(lock.stream),
     redirect: (context, state) {
+      // Anything that is not an in-memory vault key belongs on the unlock
+      // screen — including first run and the unrecoverable case, both of which
+      // that screen handles.
       final locked = lock.state is! LockUnlocked;
       final atUnlock = state.matchedLocation == Routes.unlock;
 
