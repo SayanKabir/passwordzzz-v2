@@ -1,47 +1,54 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:passwordzzz_v2/screens/login_screen.dart';
-import 'package:provider/provider.dart';
-import 'auth/auth_service.dart';
-import 'firebase_options.dart';
-import 'providers/theme_provider.dart';
-import 'theming/themes.dart';
-import 'providers/search_state_provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_router.dart';
+import 'core/di/service_locator.dart';
+import 'core/util/app_bloc_observer.dart';
+import 'features/settings/bloc/theme_cubit.dart';
+import 'features/unlock/bloc/app_lock_cubit.dart';
+import 'ui/theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const MyApp());
+  Bloc.observer = const AppBlocObserver();
+  await configureDependencies();
+  runApp(const PasswordzzzApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class PasswordzzzApp extends StatefulWidget {
+  const PasswordzzzApp({super.key});
+
+  @override
+  State<PasswordzzzApp> createState() => _PasswordzzzAppState();
+}
+
+class _PasswordzzzAppState extends State<PasswordzzzApp> {
+  late final AppLockCubit _lock = AppLockCubit();
+  late final _router = buildRouter(_lock);
+
+  @override
+  void dispose() {
+    _lock.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
+    return MultiBlocProvider(
       providers: [
-        Provider<FirebaseAuthMethods>(
-          create: (_) => FirebaseAuthMethods(FirebaseAuth.instance), // Provide FirebaseAuthMethods
-        ),
-        ChangeNotifierProvider(
-          create: (context) => ThemeProvider(),
-        ),
-        ChangeNotifierProvider(
-          create: (context) => SearchStateProvider(),
-        ),
+        BlocProvider.value(value: _lock),
+        BlocProvider(create: (_) => ThemeCubit(getIt<SharedPreferences>())),
       ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
-          return MaterialApp(
+      child: BlocBuilder<ThemeCubit, ThemeMode>(
+        builder: (context, themeMode) {
+          return MaterialApp.router(
+            title: 'Passwordzzz',
             debugShowCheckedModeBanner: false,
-            themeMode: themeProvider.getThemeMode(),
-            theme: MyThemes.lightTheme,
-            darkTheme: MyThemes.darkTheme,
-            home: LoginScreen(),
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: themeMode,
+            routerConfig: _router,
           );
         },
       ),
